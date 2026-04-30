@@ -1,46 +1,55 @@
 -- ============================================================
 -- IFGF Taipei Zhongli - Church Database Schema (FIXED)
+-- Version: 2026-05-01
+-- Changes from previous version:
+--   - Added activity_sessions table (session date + expected headcount)
+--   - attendance table unchanged; joins to activity_sessions via
+--     (activity_type_id, DATE(timestamp)) when reporting
 -- ============================================================
 
-DROP TABLE IF EXISTS role_permissions, pages, user_roles, roles, users, member_ministries, ministry_types, icare_members, icare_groups, attendance, activity_types, members CASCADE;
+DROP TABLE IF EXISTS role_permissions, pages, user_roles, roles, users,
+                     member_ministries, ministry_types, icare_members,
+                     icare_groups, attendance, activity_sessions,
+                     activity_types, members CASCADE;
+
 
 -- ============================================================
 -- 1. MEMBERS
 -- ============================================================
 CREATE TABLE members (
-    id                  SERIAL PRIMARY KEY,
-    full_name           VARCHAR(100)    NOT NULL,
-    nickname            VARCHAR(50),
-    chinese_name        VARCHAR(100),
-    date_of_birth       DATE,
-    gender              VARCHAR(1)      CHECK (gender IN ('M', 'F')),
-    phone               VARCHAR(50),
-    email               VARCHAR(100),
-    address             TEXT,
+    id                   SERIAL PRIMARY KEY,
+    full_name            VARCHAR(100)    NOT NULL,
+    nickname             VARCHAR(50),
+    chinese_name         VARCHAR(100),
+    date_of_birth        DATE,
+    gender               VARCHAR(1)      CHECK (gender IN ('M', 'F')),
+    phone                VARCHAR(50),
+    email                VARCHAR(100),
+    address              TEXT,
     address_home_country TEXT,
-    photo_url           VARCHAR(255),
+    photo_url            VARCHAR(255),
 
-    baptism_status      VARCHAR(10)     NOT NULL DEFAULT 'no'
-                            CHECK (baptism_status IN ('yes', 'no')),
-    baptism_date        DATE,
-    cgsl_status         VARCHAR(20)     NOT NULL DEFAULT 'none'
-                            CHECK (cgsl_status IN ('none', 'come', 'grow', 'serve', 'lead')),
+    baptism_status       VARCHAR(10)     NOT NULL DEFAULT 'no'
+                             CHECK (baptism_status IN ('yes', 'no')),
+    baptism_date         DATE,
+    cgsl_status          VARCHAR(20)     NOT NULL DEFAULT 'none'
+                             CHECK (cgsl_status IN ('none', 'come', 'grow', 'serve', 'lead')),
 
-    category            VARCHAR(20)
-                            CHECK (category IN ('student', 'professional', 'family', 'teenager', 'children')),
-    marital_status      VARCHAR(10)
-                            CHECK (marital_status IN ('single', 'married', 'widowed')),
-    occupation          VARCHAR(100),
+    category             VARCHAR(20)
+                             CHECK (category IN ('student', 'professional', 'family', 'teenager', 'children')),
+    marital_status       VARCHAR(10)
+                             CHECK (marital_status IN ('single', 'married', 'widowed')),
+    occupation           VARCHAR(100),
 
-    member_status       VARCHAR(10)     NOT NULL DEFAULT 'active'
-                            CHECK (member_status IN ('active', 'inactive', 'visitor')),
-    join_date           DATE,
-    home_church         VARCHAR(100),
+    member_status        VARCHAR(10)     NOT NULL DEFAULT 'active'
+                             CHECK (member_status IN ('active', 'inactive', 'visitor')),
+    join_date            DATE,
+    home_church          VARCHAR(100),
 
-    notes               TEXT,
-    created_at          TIMESTAMP       NOT NULL DEFAULT NOW(),
-    updated_at          TIMESTAMP       NOT NULL DEFAULT NOW(),
-    created_by          INTEGER
+    notes                TEXT,
+    created_at           TIMESTAMP       NOT NULL DEFAULT NOW(),
+    updated_at           TIMESTAMP       NOT NULL DEFAULT NOW(),
+    created_by           INTEGER
 );
 
 
@@ -48,11 +57,11 @@ CREATE TABLE members (
 -- 2. ACTIVITY TYPES
 -- ============================================================
 CREATE TABLE activity_types (
-    id              SERIAL PRIMARY KEY,
-    name            VARCHAR(100)    NOT NULL UNIQUE,
-    description     TEXT,
-    is_active       BOOLEAN         NOT NULL DEFAULT true,
-    created_at      TIMESTAMP       NOT NULL DEFAULT NOW()
+    id          SERIAL PRIMARY KEY,
+    name        VARCHAR(100)    NOT NULL UNIQUE,
+    description TEXT,
+    is_active   BOOLEAN         NOT NULL DEFAULT true,
+    created_at  TIMESTAMP       NOT NULL DEFAULT NOW()
 );
 
 INSERT INTO activity_types (name) VALUES
@@ -63,15 +72,42 @@ INSERT INTO activity_types (name) VALUES
 
 
 -- ============================================================
--- 3. ATTENDANCE
--- Fix: removed function call from UNIQUE constraint
+-- 3. ACTIVITY SESSIONS
+-- One row per occurrence of an activity on a specific date.
+-- expected_count is nullable — fill when registration data is known.
+-- Attendance rate = COUNT(attendance rows) / expected_count * 100
+-- ============================================================
+CREATE TABLE activity_sessions (
+    id               SERIAL PRIMARY KEY,
+    activity_type_id INTEGER         NOT NULL,
+    session_date     DATE            NOT NULL,
+    expected_count   INTEGER         NOT NULL,
+    notes            TEXT,
+    created_at       TIMESTAMP       NOT NULL DEFAULT NOW(),
+    created_by       INTEGER,
+
+    CONSTRAINT fk_session_activity
+        FOREIGN KEY (activity_type_id) REFERENCES activity_types(id)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT uq_session
+        UNIQUE (activity_type_id, session_date)
+);
+
+
+-- ============================================================
+-- 4. ATTENDANCE
+-- Records each member's actual presence at an activity session.
+-- Join to activity_sessions via:
+--     activity_type_id = a.activity_type_id
+--     AND session_date = DATE(a.timestamp)
 -- ============================================================
 CREATE TABLE attendance (
-    id                  SERIAL PRIMARY KEY,
-    member_id           INTEGER         NOT NULL,
-    activity_type_id    INTEGER         NOT NULL,
-    timestamp           TIMESTAMP       NOT NULL DEFAULT NOW(),
-    created_at          TIMESTAMP       NOT NULL DEFAULT NOW(),
+    id               SERIAL PRIMARY KEY,
+    member_id        INTEGER         NOT NULL,
+    activity_type_id INTEGER         NOT NULL,
+    timestamp        TIMESTAMP       NOT NULL DEFAULT NOW(),
+    created_at       TIMESTAMP       NOT NULL DEFAULT NOW(),
 
     CONSTRAINT fk_attendance_member
         FOREIGN KEY (member_id) REFERENCES members(id)
@@ -82,20 +118,24 @@ CREATE TABLE attendance (
         ON DELETE RESTRICT
 );
 
--- Fix: use expression index instead of constraint for DATE()
+-- Uniqueness: one attendance record per member per activity per day
 CREATE UNIQUE INDEX uq_attendance
     ON attendance (member_id, activity_type_id, DATE(timestamp));
 
+CREATE INDEX idx_attendance_member   ON attendance(member_id);
+CREATE INDEX idx_attendance_activity ON attendance(activity_type_id);
+CREATE INDEX idx_attendance_timestamp ON attendance(timestamp);
+
 
 -- ============================================================
--- 4. ICARE GROUPS
+-- 5. ICARE GROUPS
 -- ============================================================
 CREATE TABLE icare_groups (
-    id          SERIAL PRIMARY KEY,
-    name        VARCHAR(100)    NOT NULL UNIQUE,
-    leader_id   INTEGER,
-    is_active   BOOLEAN         NOT NULL DEFAULT true,
-    created_at  TIMESTAMP       NOT NULL DEFAULT NOW(),
+    id         SERIAL PRIMARY KEY,
+    name       VARCHAR(100)    NOT NULL UNIQUE,
+    leader_id  INTEGER,
+    is_active  BOOLEAN         NOT NULL DEFAULT true,
+    created_at TIMESTAMP       NOT NULL DEFAULT NOW(),
 
     CONSTRAINT fk_icare_leader
         FOREIGN KEY (leader_id) REFERENCES members(id)
@@ -104,7 +144,7 @@ CREATE TABLE icare_groups (
 
 
 -- ============================================================
--- 5. ICARE MEMBERS
+-- 6. ICARE MEMBERS
 -- ============================================================
 CREATE TABLE icare_members (
     id          SERIAL PRIMARY KEY,
@@ -126,7 +166,7 @@ CREATE TABLE icare_members (
 
 
 -- ============================================================
--- 6. MINISTRY TYPES
+-- 7. MINISTRY TYPES
 -- ============================================================
 CREATE TABLE ministry_types (
     id          SERIAL PRIMARY KEY,
@@ -144,16 +184,16 @@ INSERT INTO ministry_types (name) VALUES
 
 
 -- ============================================================
--- 7. MEMBER MINISTRIES
+-- 8. MEMBER MINISTRIES
 -- ============================================================
 CREATE TABLE member_ministries (
-    id                  SERIAL PRIMARY KEY,
-    member_id           INTEGER         NOT NULL,
-    ministry_type_id    INTEGER         NOT NULL,
-    joined_date         DATE            NOT NULL DEFAULT CURRENT_DATE,
-    left_date           DATE,
-    is_active           BOOLEAN         NOT NULL DEFAULT true,
-    created_at          TIMESTAMP       NOT NULL DEFAULT NOW(),
+    id               SERIAL PRIMARY KEY,
+    member_id        INTEGER         NOT NULL,
+    ministry_type_id INTEGER         NOT NULL,
+    joined_date      DATE            NOT NULL DEFAULT CURRENT_DATE,
+    left_date        DATE,
+    is_active        BOOLEAN         NOT NULL DEFAULT true,
+    created_at       TIMESTAMP       NOT NULL DEFAULT NOW(),
 
     CONSTRAINT fk_member_ministries_member
         FOREIGN KEY (member_id) REFERENCES members(id)
@@ -166,16 +206,16 @@ CREATE TABLE member_ministries (
 
 
 -- ============================================================
--- 8. USERS
+-- 9. USERS
 -- ============================================================
 CREATE TABLE users (
-    id              SERIAL PRIMARY KEY,
-    member_id       INTEGER         NOT NULL UNIQUE,
-    username        VARCHAR(50)     NOT NULL UNIQUE,
-    password_hash   VARCHAR(255)    NOT NULL,
-    is_active       BOOLEAN         NOT NULL DEFAULT true,
-    last_login      TIMESTAMP,
-    created_at      TIMESTAMP       NOT NULL DEFAULT NOW(),
+    id            SERIAL PRIMARY KEY,
+    member_id     INTEGER         NOT NULL UNIQUE,
+    username      VARCHAR(50)     NOT NULL UNIQUE,
+    password_hash VARCHAR(255)    NOT NULL,
+    is_active     BOOLEAN         NOT NULL DEFAULT true,
+    last_login    TIMESTAMP,
+    created_at    TIMESTAMP       NOT NULL DEFAULT NOW(),
 
     CONSTRAINT fk_users_member
         FOREIGN KEY (member_id) REFERENCES members(id)
@@ -184,7 +224,7 @@ CREATE TABLE users (
 
 
 -- ============================================================
--- 9. ROLES
+-- 10. ROLES
 -- ============================================================
 CREATE TABLE roles (
     id          SERIAL PRIMARY KEY,
@@ -201,13 +241,13 @@ INSERT INTO roles (name, description) VALUES
 
 
 -- ============================================================
--- 10. USER ROLES
+-- 11. USER ROLES
 -- ============================================================
 CREATE TABLE user_roles (
-    id          SERIAL PRIMARY KEY,
-    user_id     INTEGER         NOT NULL,
-    role_id     INTEGER         NOT NULL,
-    created_at  TIMESTAMP       NOT NULL DEFAULT NOW(),
+    id         SERIAL PRIMARY KEY,
+    user_id    INTEGER         NOT NULL,
+    role_id    INTEGER         NOT NULL,
+    created_at TIMESTAMP       NOT NULL DEFAULT NOW(),
 
     CONSTRAINT uq_user_roles UNIQUE (user_id, role_id),
 
@@ -222,14 +262,13 @@ CREATE TABLE user_roles (
 
 
 -- ============================================================
--- 11. PAGES
--- Pages that can be access-controlled (matches frontend routes)
+-- 12. PAGES
 -- ============================================================
 CREATE TABLE pages (
-    id          SERIAL PRIMARY KEY,
-    slug        VARCHAR(100)    NOT NULL UNIQUE,
-    name        VARCHAR(100)    NOT NULL,
-    created_at  TIMESTAMP       NOT NULL DEFAULT NOW()
+    id         SERIAL PRIMARY KEY,
+    slug       VARCHAR(100)    NOT NULL UNIQUE,
+    name       VARCHAR(100)    NOT NULL,
+    created_at TIMESTAMP       NOT NULL DEFAULT NOW()
 );
 
 INSERT INTO pages (slug, name) VALUES
@@ -246,16 +285,15 @@ INSERT INTO pages (slug, name) VALUES
 
 
 -- ============================================================
--- 12. ROLE PERMISSIONS
--- Which roles can access which pages (and at what level)
+-- 13. ROLE PERMISSIONS
 -- ============================================================
 CREATE TABLE role_permissions (
-    id          SERIAL PRIMARY KEY,
-    role_id     INTEGER     NOT NULL,
-    page_id     INTEGER     NOT NULL,
-    can_read    BOOLEAN     NOT NULL DEFAULT false,
-    can_write   BOOLEAN     NOT NULL DEFAULT false,
-    created_at  TIMESTAMP   NOT NULL DEFAULT NOW(),
+    id         SERIAL PRIMARY KEY,
+    role_id    INTEGER     NOT NULL,
+    page_id    INTEGER     NOT NULL,
+    can_read   BOOLEAN     NOT NULL DEFAULT false,
+    can_write  BOOLEAN     NOT NULL DEFAULT false,
+    created_at TIMESTAMP   NOT NULL DEFAULT NOW(),
 
     CONSTRAINT uq_role_page UNIQUE (role_id, page_id),
 
@@ -268,7 +306,7 @@ CREATE TABLE role_permissions (
         ON DELETE CASCADE
 );
 
-
+-- super_admin gets full access to all pages
 INSERT INTO role_permissions (role_id, page_id, can_read, can_write)
 SELECT
     (SELECT id FROM roles WHERE name = 'super_admin'),
@@ -279,16 +317,15 @@ FROM pages;
 
 
 -- ============================================================
--- INDEXES
+-- REMAINING INDEXES
 -- ============================================================
-CREATE INDEX idx_attendance_member        ON attendance(member_id);
-CREATE INDEX idx_attendance_activity      ON attendance(activity_type_id);
-CREATE INDEX idx_attendance_timestamp     ON attendance(timestamp);
-CREATE INDEX idx_icare_members_icare      ON icare_members(icare_id);
-CREATE INDEX idx_icare_members_member     ON icare_members(member_id);
-CREATE INDEX idx_member_ministries_member ON member_ministries(member_id);
-CREATE INDEX idx_users_member             ON users(member_id);
-CREATE INDEX idx_user_roles_user          ON user_roles(user_id);
-CREATE INDEX idx_user_roles_role          ON user_roles(role_id);
-CREATE INDEX idx_role_permissions_role    ON role_permissions(role_id);
-CREATE INDEX idx_role_permissions_page    ON role_permissions(page_id);
+CREATE INDEX idx_activity_sessions_type    ON activity_sessions(activity_type_id);
+CREATE INDEX idx_activity_sessions_date    ON activity_sessions(session_date);
+CREATE INDEX idx_icare_members_icare       ON icare_members(icare_id);
+CREATE INDEX idx_icare_members_member      ON icare_members(member_id);
+CREATE INDEX idx_member_ministries_member  ON member_ministries(member_id);
+CREATE INDEX idx_users_member              ON users(member_id);
+CREATE INDEX idx_user_roles_user           ON user_roles(user_id);
+CREATE INDEX idx_user_roles_role           ON user_roles(role_id);
+CREATE INDEX idx_role_permissions_role     ON role_permissions(role_id);
+CREATE INDEX idx_role_permissions_page     ON role_permissions(page_id);
