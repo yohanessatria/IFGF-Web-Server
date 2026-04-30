@@ -143,6 +143,18 @@ class MemberOut(MemberBase):
 
 # ── ACTIVITY TYPE ─────────────────────────────────────────────────────────────
 
+class ActivityTypeCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    is_active: bool = True
+
+
+class ActivityTypeUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
 class ActivityTypeOut(BaseModel):
     id: int
     name: str
