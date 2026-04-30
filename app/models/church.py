@@ -57,6 +57,22 @@ class ActivityType(Base):
     created_at  = Column(DateTime(timezone=True), server_default=func.now())
 
 
+class ActivitySession(Base):
+    __tablename__ = "activity_sessions"
+
+    id               = Column(Integer, primary_key=True, index=True)
+    activity_type_id = Column(Integer, ForeignKey("activity_types.id", ondelete="RESTRICT"), nullable=False, index=True)
+    session_date     = Column(Date, nullable=False, index=True)
+    expected_count   = Column(Integer, nullable=False)
+    notes            = Column(Text)
+    created_at       = Column(DateTime(timezone=True), server_default=func.now())
+    created_by       = Column(Integer)
+
+    __table_args__ = (
+        UniqueConstraint("activity_type_id", "session_date", name="uq_session"),
+    )
+
+
 class Attendance(Base):
     __tablename__ = "attendance"
 

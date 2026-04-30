@@ -163,6 +163,30 @@ class ActivityTypeOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+# ── ACTIVITY SESSION ──────────────────────────────────────────────────────────
+
+class ActivitySessionCreate(BaseModel):
+    activity_type_id: int
+    session_date: date
+    expected_count: int
+    notes: Optional[str] = None
+
+
+class ActivitySessionUpdate(BaseModel):
+    expected_count: Optional[int] = None
+    notes: Optional[str] = None
+
+
+class ActivitySessionOut(BaseModel):
+    id: int
+    activity_type_id: int
+    session_date: date
+    expected_count: int
+    notes: Optional[str]
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
 # ── ATTENDANCE ────────────────────────────────────────────────────────────────
 
 class AttendanceCheckIn(BaseModel):
