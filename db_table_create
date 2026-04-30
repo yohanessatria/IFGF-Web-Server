@@ -1,16 +1,24 @@
 -- ============================================================
 -- IFGF Taipei Zhongli - Church Database Schema (FIXED)
--- Version: 2026-05-01
+-- Version: 2026-05-01b
 -- Changes from previous version:
---   - Added activity_sessions table (session date + expected headcount)
---   - attendance table unchanged; joins to activity_sessions via
---     (activity_type_id, DATE(timestamp)) when reporting
+--   - Added activity_registrations table (who registered for a session)
+-- ============================================================
+--
+-- ATTENDANCE TRACKING SUMMARY
+-- ----------------------------
+-- Sunday service   → attendance only (no session, no registration needed)
+-- CGSL / events    → activity_sessions + activity_registrations + attendance
+-- iCare            → icare_members (enrollment) + attendance
+--
+-- attendance joins to activity_sessions via:
+--     activity_type_id = a.activity_type_id AND session_date = DATE(a.timestamp)
 -- ============================================================
 
 DROP TABLE IF EXISTS role_permissions, pages, user_roles, roles, users,
                      member_ministries, ministry_types, icare_members,
-                     icare_groups, attendance, activity_sessions,
-                     activity_types, members CASCADE;
+                     icare_groups, attendance, activity_registrations,
+                     activity_sessions, activity_types, members CASCADE;
 
 
 -- ============================================================
@@ -73,15 +81,17 @@ INSERT INTO activity_types (name) VALUES
 
 -- ============================================================
 -- 3. ACTIVITY SESSIONS
--- One row per occurrence of an activity on a specific date.
--- expected_count is nullable — fill when registration data is known.
--- Attendance rate = COUNT(attendance rows) / expected_count * 100
+-- One row per planned occurrence of an activity on a specific date.
+-- Not all activity types require a session row (e.g. Sunday service
+-- attendance can be recorded without one).
+-- expected_count is nullable — can be filled manually when
+-- registration is not tracked, or derived from activity_registrations.
 -- ============================================================
 CREATE TABLE activity_sessions (
     id               SERIAL PRIMARY KEY,
     activity_type_id INTEGER         NOT NULL,
     session_date     DATE            NOT NULL,
-    expected_count   INTEGER         NOT NULL,
+    expected_count   INTEGER         CHECK (expected_count IS NULL OR expected_count >= 0),
     notes            TEXT,
     created_at       TIMESTAMP       NOT NULL DEFAULT NOW(),
     created_by       INTEGER,
@@ -96,9 +106,39 @@ CREATE TABLE activity_sessions (
 
 
 -- ============================================================
--- 4. ATTENDANCE
--- Records each member's actual presence at an activity session.
--- Join to activity_sessions via:
+-- 4. ACTIVITY REGISTRATIONS
+-- Records which members have registered for a specific session.
+-- Used for planned activities (CGSL, special events) where
+-- registration is tracked in advance.
+-- Enables: registered vs attended reporting, no-show tracking.
+-- ============================================================
+CREATE TABLE activity_registrations (
+    id            SERIAL PRIMARY KEY,
+    session_id    INTEGER         NOT NULL,
+    member_id     INTEGER         NOT NULL,
+    registered_at TIMESTAMP       NOT NULL DEFAULT NOW(),
+    notes         TEXT,
+    created_at    TIMESTAMP       NOT NULL DEFAULT NOW(),
+    created_by    INTEGER,
+
+    CONSTRAINT uq_activity_registration
+        UNIQUE (session_id, member_id),
+
+    CONSTRAINT fk_ar_session
+        FOREIGN KEY (session_id) REFERENCES activity_sessions(id)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT fk_ar_member
+        FOREIGN KEY (member_id) REFERENCES members(id)
+        ON DELETE RESTRICT
+);
+
+
+-- ============================================================
+-- 5. ATTENDANCE
+-- Records each member's actual presence at any activity.
+-- For Sunday service: recorded directly with no session row needed.
+-- For CGSL / events: joins to activity_sessions via
 --     activity_type_id = a.activity_type_id
 --     AND session_date = DATE(a.timestamp)
 -- ============================================================
@@ -122,13 +162,9 @@ CREATE TABLE attendance (
 CREATE UNIQUE INDEX uq_attendance
     ON attendance (member_id, activity_type_id, DATE(timestamp));
 
-CREATE INDEX idx_attendance_member   ON attendance(member_id);
-CREATE INDEX idx_attendance_activity ON attendance(activity_type_id);
-CREATE INDEX idx_attendance_timestamp ON attendance(timestamp);
-
 
 -- ============================================================
--- 5. ICARE GROUPS
+-- 6. ICARE GROUPS
 -- ============================================================
 CREATE TABLE icare_groups (
     id         SERIAL PRIMARY KEY,
@@ -144,7 +180,7 @@ CREATE TABLE icare_groups (
 
 
 -- ============================================================
--- 6. ICARE MEMBERS
+-- 7. ICARE MEMBERS
 -- ============================================================
 CREATE TABLE icare_members (
     id          SERIAL PRIMARY KEY,
@@ -166,7 +202,7 @@ CREATE TABLE icare_members (
 
 
 -- ============================================================
--- 7. MINISTRY TYPES
+-- 8. MINISTRY TYPES
 -- ============================================================
 CREATE TABLE ministry_types (
     id          SERIAL PRIMARY KEY,
@@ -184,7 +220,7 @@ INSERT INTO ministry_types (name) VALUES
 
 
 -- ============================================================
--- 8. MEMBER MINISTRIES
+-- 9. MEMBER MINISTRIES
 -- ============================================================
 CREATE TABLE member_ministries (
     id               SERIAL PRIMARY KEY,
@@ -206,7 +242,7 @@ CREATE TABLE member_ministries (
 
 
 -- ============================================================
--- 9. USERS
+-- 10. USERS
 -- ============================================================
 CREATE TABLE users (
     id            SERIAL PRIMARY KEY,
@@ -224,7 +260,7 @@ CREATE TABLE users (
 
 
 -- ============================================================
--- 10. ROLES
+-- 11. ROLES
 -- ============================================================
 CREATE TABLE roles (
     id          SERIAL PRIMARY KEY,
@@ -241,7 +277,7 @@ INSERT INTO roles (name, description) VALUES
 
 
 -- ============================================================
--- 11. USER ROLES
+-- 12. USER ROLES
 -- ============================================================
 CREATE TABLE user_roles (
     id         SERIAL PRIMARY KEY,
@@ -262,7 +298,7 @@ CREATE TABLE user_roles (
 
 
 -- ============================================================
--- 12. PAGES
+-- 13. PAGES
 -- ============================================================
 CREATE TABLE pages (
     id         SERIAL PRIMARY KEY,
@@ -272,20 +308,24 @@ CREATE TABLE pages (
 );
 
 INSERT INTO pages (slug, name) VALUES
-    ('dashboard',                  'Dashboard'),
-    ('members',                    'Members'),
-    ('attendance',                 'Attendance'),
-    ('icare',                      'iCare'),
-    ('ministries',                 'Ministries'),
-    ('maintenance/icare-groups',   'iCare Groups'),
-    ('maintenance/ministry-types', 'Ministry Types'),
-    ('maintenance/users',          'Users'),
-    ('maintenance/roles',          'Roles'),
-    ('maintenance/pages',          'Pages');
+    ('attendance',                        'Attendance'),
+    ('dashboard',                         'Dashboard'),
+    ('icare',                             'iCare'),
+    ('maintenance/activity-registrations','Activity Registrations'),
+    ('maintenance/activity-sessions',     'Activity Sessions'),
+    ('maintenance/activity-types',        'Activity Types'),
+    ('maintenance/icare-groups',          'iCare Groups'),
+    ('maintenance/ministry-types',        'Ministry Types'),
+    ('maintenance/pages',                 'Pages'),
+    ('maintenance/roles',                 'Roles'),
+    ('maintenance/users',                 'Users'),
+    ('members',                           'Members'),
+    ('ministries',                        'Ministries');
+    
 
 
 -- ============================================================
--- 13. ROLE PERMISSIONS
+-- 14. ROLE PERMISSIONS
 -- ============================================================
 CREATE TABLE role_permissions (
     id         SERIAL PRIMARY KEY,
@@ -317,15 +357,75 @@ FROM pages;
 
 
 -- ============================================================
--- REMAINING INDEXES
+-- INDEXES
 -- ============================================================
-CREATE INDEX idx_activity_sessions_type    ON activity_sessions(activity_type_id);
-CREATE INDEX idx_activity_sessions_date    ON activity_sessions(session_date);
-CREATE INDEX idx_icare_members_icare       ON icare_members(icare_id);
-CREATE INDEX idx_icare_members_member      ON icare_members(member_id);
-CREATE INDEX idx_member_ministries_member  ON member_ministries(member_id);
-CREATE INDEX idx_users_member              ON users(member_id);
-CREATE INDEX idx_user_roles_user           ON user_roles(user_id);
-CREATE INDEX idx_user_roles_role           ON user_roles(role_id);
-CREATE INDEX idx_role_permissions_role     ON role_permissions(role_id);
-CREATE INDEX idx_role_permissions_page     ON role_permissions(page_id);
+CREATE INDEX idx_activity_sessions_type          ON activity_sessions(activity_type_id);
+CREATE INDEX idx_activity_sessions_date          ON activity_sessions(session_date);
+CREATE INDEX idx_activity_registrations_session  ON activity_registrations(session_id);
+CREATE INDEX idx_activity_registrations_member   ON activity_registrations(member_id);
+CREATE INDEX idx_attendance_member               ON attendance(member_id);
+CREATE INDEX idx_attendance_activity             ON attendance(activity_type_id);
+CREATE INDEX idx_attendance_timestamp            ON attendance(timestamp);
+CREATE INDEX idx_icare_members_icare             ON icare_members(icare_id);
+CREATE INDEX idx_icare_members_member            ON icare_members(member_id);
+CREATE INDEX idx_member_ministries_member        ON member_ministries(member_id);
+CREATE INDEX idx_users_member                    ON users(member_id);
+CREATE INDEX idx_user_roles_user                 ON user_roles(user_id);
+CREATE INDEX idx_user_roles_role                 ON user_roles(role_id);
+CREATE INDEX idx_role_permissions_role           ON role_permissions(role_id);
+CREATE INDEX idx_role_permissions_page           ON role_permissions(page_id);
+
+
+-- ============================================================
+-- EXAMPLE REPORT QUERIES
+-- ============================================================
+
+-- 1. Registered vs attended per session (CGSL / special events)
+--
+-- SELECT
+--     at.name                                                   AS activity,
+--     s.session_date,
+--     COUNT(DISTINCT ar.member_id)                              AS registered,
+--     COUNT(DISTINCT a.member_id)                               AS attended,
+--     ROUND(COUNT(DISTINCT a.member_id) * 100.0
+--           / NULLIF(COUNT(DISTINCT ar.member_id), 0), 1)       AS attendance_rate_pct
+-- FROM activity_sessions s
+-- JOIN activity_types at ON at.id = s.activity_type_id
+-- LEFT JOIN activity_registrations ar ON ar.session_id = s.id
+-- LEFT JOIN attendance a
+--        ON a.activity_type_id = s.activity_type_id
+--       AND DATE(a.timestamp)  = s.session_date
+--       AND a.member_id        = ar.member_id
+-- GROUP BY at.name, s.session_date
+-- ORDER BY s.session_date DESC;
+
+
+-- 2. No-show report: registered but did not attend
+--
+-- SELECT
+--     m.full_name,
+--     at.name       AS activity,
+--     s.session_date
+-- FROM activity_registrations ar
+-- JOIN activity_sessions s  ON s.id  = ar.session_id
+-- JOIN activity_types at    ON at.id = s.activity_type_id
+-- JOIN members m            ON m.id  = ar.member_id
+-- WHERE NOT EXISTS (
+--     SELECT 1 FROM attendance a
+--     WHERE a.member_id        = ar.member_id
+--       AND a.activity_type_id = s.activity_type_id
+--       AND DATE(a.timestamp)  = s.session_date
+-- )
+-- ORDER BY s.session_date DESC, m.full_name;
+
+
+-- 3. Sunday service headcount (no session / registration needed)
+--
+-- SELECT
+--     DATE(a.timestamp)   AS service_date,
+--     COUNT(*)            AS headcount
+-- FROM attendance a
+-- JOIN activity_types at ON at.id = a.activity_type_id
+-- WHERE at.name = 'Ibadah Taipei'
+-- GROUP BY DATE(a.timestamp)
+-- ORDER BY service_date DESC;

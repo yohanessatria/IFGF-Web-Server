@@ -63,13 +63,29 @@ class ActivitySession(Base):
     id               = Column(Integer, primary_key=True, index=True)
     activity_type_id = Column(Integer, ForeignKey("activity_types.id", ondelete="RESTRICT"), nullable=False, index=True)
     session_date     = Column(Date, nullable=False, index=True)
-    expected_count   = Column(Integer, nullable=False)
+    expected_count   = Column(Integer, nullable=True)
     notes            = Column(Text)
     created_at       = Column(DateTime(timezone=True), server_default=func.now())
     created_by       = Column(Integer)
 
     __table_args__ = (
         UniqueConstraint("activity_type_id", "session_date", name="uq_session"),
+    )
+
+
+class ActivityRegistration(Base):
+    __tablename__ = "activity_registrations"
+
+    id            = Column(Integer, primary_key=True, index=True)
+    session_id    = Column(Integer, ForeignKey("activity_sessions.id", ondelete="RESTRICT"), nullable=False, index=True)
+    member_id     = Column(Integer, ForeignKey("members.id", ondelete="RESTRICT"), nullable=False, index=True)
+    registered_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    notes         = Column(Text)
+    created_at    = Column(DateTime(timezone=True), server_default=func.now())
+    created_by    = Column(Integer)
+
+    __table_args__ = (
+        UniqueConstraint("session_id", "member_id", name="uq_activity_registration"),
     )
 
 
