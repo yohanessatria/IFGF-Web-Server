@@ -168,7 +168,7 @@ class ActivityTypeOut(BaseModel):
 class ActivitySessionCreate(BaseModel):
     activity_type_id: int
     session_date: date
-    expected_count: int
+    expected_count: Optional[int] = None
     notes: Optional[str] = None
 
 
@@ -181,7 +181,30 @@ class ActivitySessionOut(BaseModel):
     id: int
     activity_type_id: int
     session_date: date
-    expected_count: int
+    expected_count: Optional[int]
+    notes: Optional[str]
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ── ACTIVITY REGISTRATION ─────────────────────────────────────────────────────
+
+class ActivityRegistrationCreate(BaseModel):
+    session_id: int
+    member_id: int
+    registered_at: Optional[datetime] = None
+    notes: Optional[str] = None
+
+
+class ActivityRegistrationUpdate(BaseModel):
+    notes: Optional[str] = None
+
+
+class ActivityRegistrationOut(BaseModel):
+    id: int
+    session_id: int
+    member_id: int
+    registered_at: datetime
     notes: Optional[str]
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
