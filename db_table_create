@@ -233,11 +233,16 @@ CREATE TABLE pages (
 );
 
 INSERT INTO pages (slug, name) VALUES
-    ('dashboard',   'Dashboard'),
-    ('members',     'Members'),
-    ('attendance',  'Attendance'),
-    ('icare',       'iCare'),
-    ('ministries',  'Ministries');
+    ('dashboard',                  'Dashboard'),
+    ('members',                    'Members'),
+    ('attendance',                 'Attendance'),
+    ('icare',                      'iCare'),
+    ('ministries',                 'Ministries'),
+    ('maintenance/icare-groups',   'iCare Groups'),
+    ('maintenance/ministry-types', 'Ministry Types'),
+    ('maintenance/users',          'Users'),
+    ('maintenance/roles',          'Roles'),
+    ('maintenance/pages',          'Pages');
 
 
 -- ============================================================

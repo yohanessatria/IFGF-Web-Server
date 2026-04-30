@@ -6,14 +6,17 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import require_active_user
 from app.models.church import MinistryType, MemberMinistry, Member
-from app.schemas.schemas import MinistryTypeCreate, MinistryTypeOut, MemberMinistryCreate, MemberMinistryOut
+from app.schemas.schemas import MinistryTypeCreate, MinistryTypeUpdate, MinistryTypeOut, MemberMinistryCreate, MemberMinistryOut
 
 router = APIRouter(prefix="/api/ministries", tags=["Ministries"])
 
 
 @router.get("/types", response_model=List[MinistryTypeOut])
-def list_ministry_types(db: Session = Depends(get_db), _=Depends(require_active_user)):
-    return db.query(MinistryType).filter(MinistryType.is_active == True).all()
+def list_ministry_types(include_inactive: bool = False, db: Session = Depends(get_db), _=Depends(require_active_user)):
+    q = db.query(MinistryType)
+    if not include_inactive:
+        q = q.filter(MinistryType.is_active == True)
+    return q.all()
 
 
 @router.post("/types", response_model=MinistryTypeOut, status_code=201)
@@ -22,6 +25,18 @@ def create_ministry_type(payload: MinistryTypeCreate, db: Session = Depends(get_
         raise HTTPException(status_code=409, detail="Ministry type with this name already exists")
     record = MinistryType(**payload.model_dump())
     db.add(record)
+    db.commit()
+    db.refresh(record)
+    return record
+
+
+@router.patch("/types/{type_id}", response_model=MinistryTypeOut)
+def update_ministry_type(type_id: int, payload: MinistryTypeUpdate, db: Session = Depends(get_db), _=Depends(require_active_user)):
+    record = db.get(MinistryType, type_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Ministry type not found")
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(record, field, value)
     db.commit()
     db.refresh(record)
     return record

@@ -40,6 +40,11 @@ class UserWithRoles(UserOut):
 
 # ── ROLE ──────────────────────────────────────────────────────────────────────
 
+class RoleCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+
+
 class RoleOut(BaseModel):
     id: int
     name: str
@@ -61,6 +66,11 @@ class UserRoleOut(BaseModel):
 
 
 # ── PAGE ──────────────────────────────────────────────────────────────────────
+
+class PageCreate(BaseModel):
+    slug: str
+    name: str
+
 
 class PageOut(BaseModel):
     id: int
@@ -210,6 +220,12 @@ class MinistryTypeCreate(BaseModel):
     name: str
     description: Optional[str] = None
     is_active: bool = True
+
+
+class MinistryTypeUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    is_active: Optional[bool] = None
 
 
 class MinistryTypeOut(BaseModel):
