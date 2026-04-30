@@ -1,7 +1,7 @@
 from __future__ import annotations
 from datetime import date, datetime
 from typing import Optional, List
-from pydantic import BaseModel, EmailStr, ConfigDict
+from pydantic import BaseModel, ConfigDict
 
 
 # ── AUTH ──────────────────────────────────────────────────────────────────────
@@ -12,20 +12,72 @@ class Token(BaseModel):
 
 
 class UserCreate(BaseModel):
+    member_id: int
     username: str
-    email: EmailStr
     password: str
-    full_name: Optional[str] = None
-    role: str = "staff"
 
 
 class UserOut(BaseModel):
     id: int
+    member_id: int
     username: str
-    email: str
-    full_name: Optional[str]
-    role: str
     is_active: bool
+    last_login: Optional[datetime]
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class UserWithRoles(UserOut):
+    roles: List[str] = []
+
+
+# ── ROLE ──────────────────────────────────────────────────────────────────────
+
+class RoleOut(BaseModel):
+    id: int
+    name: str
+    description: Optional[str]
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class UserRoleCreate(BaseModel):
+    role_id: int
+
+
+class UserRoleOut(BaseModel):
+    id: int
+    user_id: int
+    role_id: int
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ── PAGE ──────────────────────────────────────────────────────────────────────
+
+class PageOut(BaseModel):
+    id: int
+    slug: str
+    name: str
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ── ROLE PERMISSION ───────────────────────────────────────────────────────────
+
+class RolePermissionUpsert(BaseModel):
+    page_id: int
+    can_read: bool = False
+    can_write: bool = False
+
+
+class RolePermissionOut(BaseModel):
+    id: int
+    role_id: int
+    page_id: int
+    can_read: bool
+    can_write: bool
+    created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
 
