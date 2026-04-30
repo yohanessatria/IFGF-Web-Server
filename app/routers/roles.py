@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import require_active_user
 from app.models.user import Role, Page, RolePermission
-from app.schemas.schemas import RoleOut, PageOut, RolePermissionUpsert, RolePermissionOut
+from app.schemas.schemas import RoleCreate, RoleOut, PageCreate, PageOut, RolePermissionUpsert, RolePermissionOut
 
 router = APIRouter(prefix="/api/roles", tags=["Roles"])
 
@@ -14,6 +14,17 @@ router = APIRouter(prefix="/api/roles", tags=["Roles"])
 @router.get("/", response_model=list[RoleOut])
 def list_roles(db: Session = Depends(get_db), _=Depends(require_active_user)):
     return db.query(Role).all()
+
+
+@router.post("/", response_model=RoleOut, status_code=201)
+def create_role(payload: RoleCreate, db: Session = Depends(get_db), _=Depends(require_active_user)):
+    if db.query(Role).filter(Role.name == payload.name).first():
+        raise HTTPException(status_code=409, detail="Role with this name already exists")
+    role = Role(name=payload.name, description=payload.description)
+    db.add(role)
+    db.commit()
+    db.refresh(role)
+    return role
 
 
 @router.get("/{role_id}", response_model=RoleOut)
@@ -28,7 +39,18 @@ def get_role(role_id: int, db: Session = Depends(get_db), _=Depends(require_acti
 
 @router.get("/pages/", response_model=list[PageOut])
 def list_pages(db: Session = Depends(get_db), _=Depends(require_active_user)):
-    return db.query(Page).all()
+    return db.query(Page).order_by(Page.slug).all()
+
+
+@router.post("/pages/", response_model=PageOut, status_code=201)
+def create_page(payload: PageCreate, db: Session = Depends(get_db), _=Depends(require_active_user)):
+    if db.query(Page).filter(Page.slug == payload.slug).first():
+        raise HTTPException(status_code=409, detail="Page with this slug already exists")
+    page = Page(slug=payload.slug, name=payload.name)
+    db.add(page)
+    db.commit()
+    db.refresh(page)
+    return page
 
 
 # ── Role Permissions ──────────────────────────────────────────────────────────
