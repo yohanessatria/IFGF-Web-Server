@@ -8,6 +8,7 @@ from app.core.security import (
     create_access_token, require_active_user
 )
 from app.models.user import User
+from app.models.church import Member
 from app.schemas.schemas import Token, UserCreate, UserOut
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
@@ -16,7 +17,7 @@ router = APIRouter(prefix="/api/auth", tags=["Auth"])
 @router.post("/token", response_model=Token)
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == form_data.username).first()
-    if not user or not verify_password(form_data.password, user.hashed_password):
+    if not user or not verify_password(form_data.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
@@ -28,16 +29,16 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
 
 @router.post("/register", response_model=UserOut, status_code=201)
 def register(payload: UserCreate, db: Session = Depends(get_db)):
+    if not db.query(Member).filter(Member.id == payload.member_id).first():
+        raise HTTPException(status_code=404, detail="Member not found")
+    if db.query(User).filter(User.member_id == payload.member_id).first():
+        raise HTTPException(status_code=400, detail="Member already has a user account")
     if db.query(User).filter(User.username == payload.username).first():
         raise HTTPException(status_code=400, detail="Username already taken")
-    if db.query(User).filter(User.email == payload.email).first():
-        raise HTTPException(status_code=400, detail="Email already registered")
     user = User(
+        member_id=payload.member_id,
         username=payload.username,
-        email=payload.email,
-        hashed_password=get_password_hash(payload.password),
-        full_name=payload.full_name,
-        role=payload.role,
+        password_hash=get_password_hash(payload.password),
     )
     db.add(user)
     db.commit()

@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.database import engine, Base
 from app.models import user, church  # noqa: ensure models are registered
-from app.routers import auth, members, attendance, icare, ministries, dashboard, activity_types
+from app.routers import auth, members, attendance, icare, ministries, dashboard, activity_types, users, roles
 
 # Create all tables (run once; use Alembic for production migrations)
 Base.metadata.create_all(bind=engine)
@@ -30,6 +30,8 @@ app.include_router(icare.router)
 app.include_router(ministries.router)
 app.include_router(dashboard.router)
 app.include_router(activity_types.router)
+app.include_router(users.router)
+app.include_router(roles.router)
 
 
 @app.get("/", tags=["Health"])

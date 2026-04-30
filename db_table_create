@@ -2,7 +2,7 @@
 -- IFGF Taipei Zhongli - Church Database Schema (FIXED)
 -- ============================================================
 
-DROP TABLE IF EXISTS member_ministries, ministry_types, icare_members, icare_groups, attendance, activity_types, members CASCADE;
+DROP TABLE IF EXISTS role_permissions, pages, user_roles, roles, users, member_ministries, ministry_types, icare_members, icare_groups, attendance, activity_types, members CASCADE;
 
 -- ============================================================
 -- 1. MEMBERS
@@ -166,11 +166,115 @@ CREATE TABLE member_ministries (
 
 
 -- ============================================================
+-- 8. USERS
+-- ============================================================
+CREATE TABLE users (
+    id              SERIAL PRIMARY KEY,
+    member_id       INTEGER         NOT NULL UNIQUE,
+    username        VARCHAR(50)     NOT NULL UNIQUE,
+    password_hash   VARCHAR(255)    NOT NULL,
+    is_active       BOOLEAN         NOT NULL DEFAULT true,
+    last_login      TIMESTAMP,
+    created_at      TIMESTAMP       NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT fk_users_member
+        FOREIGN KEY (member_id) REFERENCES members(id)
+        ON DELETE RESTRICT
+);
+
+
+-- ============================================================
+-- 9. ROLES
+-- ============================================================
+CREATE TABLE roles (
+    id          SERIAL PRIMARY KEY,
+    name        VARCHAR(50)     NOT NULL UNIQUE,
+    description TEXT,
+    created_at  TIMESTAMP       NOT NULL DEFAULT NOW()
+);
+
+INSERT INTO roles (name, description) VALUES
+    ('super_admin',  'Akses penuh ke semua fitur termasuk manajemen user dan database'),
+    ('admin',        'Kelola data jemaat, kehadiran, dan generate laporan'),
+    ('icare_leader', 'Input kehadiran iCare untuk grup yang dipimpin'),
+    ('cgsl_leader',  'Input kehadiran CGSL untuk sesi yang dipimpin');
+
+
+-- ============================================================
+-- 10. USER ROLES
+-- ============================================================
+CREATE TABLE user_roles (
+    id          SERIAL PRIMARY KEY,
+    user_id     INTEGER         NOT NULL,
+    role_id     INTEGER         NOT NULL,
+    created_at  TIMESTAMP       NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT uq_user_roles UNIQUE (user_id, role_id),
+
+    CONSTRAINT fk_user_roles_user
+        FOREIGN KEY (user_id) REFERENCES users(id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT fk_user_roles_role
+        FOREIGN KEY (role_id) REFERENCES roles(id)
+        ON DELETE RESTRICT
+);
+
+
+-- ============================================================
+-- 11. PAGES
+-- Pages that can be access-controlled (matches frontend routes)
+-- ============================================================
+CREATE TABLE pages (
+    id          SERIAL PRIMARY KEY,
+    slug        VARCHAR(100)    NOT NULL UNIQUE,
+    name        VARCHAR(100)    NOT NULL,
+    created_at  TIMESTAMP       NOT NULL DEFAULT NOW()
+);
+
+INSERT INTO pages (slug, name) VALUES
+    ('dashboard',   'Dashboard'),
+    ('members',     'Members'),
+    ('attendance',  'Attendance'),
+    ('icare',       'iCare'),
+    ('ministries',  'Ministries');
+
+
+-- ============================================================
+-- 12. ROLE PERMISSIONS
+-- Which roles can access which pages (and at what level)
+-- ============================================================
+CREATE TABLE role_permissions (
+    id          SERIAL PRIMARY KEY,
+    role_id     INTEGER     NOT NULL,
+    page_id     INTEGER     NOT NULL,
+    can_read    BOOLEAN     NOT NULL DEFAULT false,
+    can_write   BOOLEAN     NOT NULL DEFAULT false,
+    created_at  TIMESTAMP   NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT uq_role_page UNIQUE (role_id, page_id),
+
+    CONSTRAINT fk_rp_role
+        FOREIGN KEY (role_id) REFERENCES roles(id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT fk_rp_page
+        FOREIGN KEY (page_id) REFERENCES pages(id)
+        ON DELETE CASCADE
+);
+
+
+-- ============================================================
 -- INDEXES
 -- ============================================================
-CREATE INDEX idx_attendance_member       ON attendance(member_id);
-CREATE INDEX idx_attendance_activity     ON attendance(activity_type_id);
-CREATE INDEX idx_attendance_timestamp    ON attendance(timestamp);
-CREATE INDEX idx_icare_members_icare     ON icare_members(icare_id);
-CREATE INDEX idx_icare_members_member    ON icare_members(member_id);
+CREATE INDEX idx_attendance_member        ON attendance(member_id);
+CREATE INDEX idx_attendance_activity      ON attendance(activity_type_id);
+CREATE INDEX idx_attendance_timestamp     ON attendance(timestamp);
+CREATE INDEX idx_icare_members_icare      ON icare_members(icare_id);
+CREATE INDEX idx_icare_members_member     ON icare_members(member_id);
 CREATE INDEX idx_member_ministries_member ON member_ministries(member_id);
+CREATE INDEX idx_users_member             ON users(member_id);
+CREATE INDEX idx_user_roles_user          ON user_roles(user_id);
+CREATE INDEX idx_user_roles_role          ON user_roles(role_id);
+CREATE INDEX idx_role_permissions_role    ON role_permissions(role_id);
+CREATE INDEX idx_role_permissions_page    ON role_permissions(page_id);
