@@ -34,11 +34,13 @@ class UserOut(BaseModel):
 class MemberBase(BaseModel):
     full_name: str
     nickname: Optional[str] = None
+    chinese_name: Optional[str] = None
     date_of_birth: Optional[date] = None
     gender: Optional[str] = None
     phone: Optional[str] = None
     email: Optional[str] = None
     address: Optional[str] = None
+    address_home_country: Optional[str] = None
     photo_url: Optional[str] = None
     baptism_status: str = "no"
     baptism_date: Optional[date] = None

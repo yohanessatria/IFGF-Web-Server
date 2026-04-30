@@ -8,15 +8,17 @@ from app.core.database import Base
 class Member(Base):
     __tablename__ = "members"
 
-    id               = Column(Integer, primary_key=True, index=True)
-    full_name        = Column(String(100), nullable=False)
-    nickname         = Column(String(50))
-    date_of_birth    = Column(Date)
-    gender           = Column(String(1))
-    phone            = Column(String(20))
-    email            = Column(String(100))
-    address          = Column(Text)
-    photo_url        = Column(String(255))
+    id                   = Column(Integer, primary_key=True, index=True)
+    full_name            = Column(String(100), nullable=False)
+    nickname             = Column(String(50))
+    chinese_name         = Column(String(100))
+    date_of_birth        = Column(Date)
+    gender               = Column(String(1))
+    phone                = Column(String(50))
+    email                = Column(String(100))
+    address              = Column(Text)
+    address_home_country = Column(Text)
+    photo_url            = Column(String(255))
 
     baptism_status   = Column(String(10), nullable=False, default="no")
     baptism_date     = Column(Date)
