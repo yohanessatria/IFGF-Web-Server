@@ -264,6 +264,15 @@ CREATE TABLE role_permissions (
 );
 
 
+INSERT INTO role_permissions (role_id, page_id, can_read, can_write)
+SELECT
+    (SELECT id FROM roles WHERE name = 'super_admin'),
+    id,
+    true,
+    true
+FROM pages;
+
+
 -- ============================================================
 -- INDEXES
 -- ============================================================
