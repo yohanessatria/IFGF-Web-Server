@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import require_active_user
 from app.models.church import MinistryType, MemberMinistry, Member
-from app.schemas.schemas import MinistryTypeOut, MemberMinistryCreate, MemberMinistryOut
+from app.schemas.schemas import MinistryTypeCreate, MinistryTypeOut, MemberMinistryCreate, MemberMinistryOut
 
 router = APIRouter(prefix="/api/ministries", tags=["Ministries"])
 
@@ -14,6 +14,17 @@ router = APIRouter(prefix="/api/ministries", tags=["Ministries"])
 @router.get("/types", response_model=List[MinistryTypeOut])
 def list_ministry_types(db: Session = Depends(get_db), _=Depends(require_active_user)):
     return db.query(MinistryType).filter(MinistryType.is_active == True).all()
+
+
+@router.post("/types", response_model=MinistryTypeOut, status_code=201)
+def create_ministry_type(payload: MinistryTypeCreate, db: Session = Depends(get_db), _=Depends(require_active_user)):
+    if db.query(MinistryType).filter(MinistryType.name == payload.name).first():
+        raise HTTPException(status_code=409, detail="Ministry type with this name already exists")
+    record = MinistryType(**payload.model_dump())
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    return record
 
 
 @router.get("/members", response_model=List[MemberMinistryOut])

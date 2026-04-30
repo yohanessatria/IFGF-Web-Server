@@ -147,6 +147,12 @@ class IcareMemberOut(BaseModel):
 
 # ── MINISTRY TYPE ─────────────────────────────────────────────────────────────
 
+class MinistryTypeCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    is_active: bool = True
+
+
 class MinistryTypeOut(BaseModel):
     id: int
     name: str
