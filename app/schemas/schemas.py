@@ -17,13 +17,20 @@ class UserCreate(BaseModel):
     password: str
 
 
+class PermissionOut(BaseModel):
+    read: bool
+    write: bool
+
+
 class UserOut(BaseModel):
     id: int
     member_id: int
     username: str
+    full_name: Optional[str] = None
     is_active: bool
     last_login: Optional[datetime]
     created_at: datetime
+    permissions: dict[str, PermissionOut] = {}
     model_config = ConfigDict(from_attributes=True)
 
 

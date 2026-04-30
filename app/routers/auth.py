@@ -1,15 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.core.database import get_db
 from app.core.security import (
     verify_password, get_password_hash,
     create_access_token, require_active_user
 )
-from app.models.user import User
+from app.models.user import User, UserRole, Role, RolePermission
 from app.models.church import Member
-from app.schemas.schemas import Token, UserCreate, UserOut
+from app.schemas.schemas import Token, UserCreate, UserOut, PermissionOut
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
 
@@ -47,5 +47,34 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
 
 
 @router.get("/me", response_model=UserOut)
-def me(current_user=Depends(require_active_user)):
-    return current_user
+def me(current_user: User = Depends(require_active_user), db: Session = Depends(get_db)):
+    user = (
+        db.query(User)
+        .options(
+            joinedload(User.member),
+            joinedload(User.user_roles).joinedload(UserRole.role).joinedload(Role.role_permissions).joinedload(RolePermission.page),
+        )
+        .filter(User.id == current_user.id)
+        .first()
+    )
+
+    permissions: dict[str, PermissionOut] = {}
+    for ur in user.user_roles:
+        for rp in ur.role.role_permissions:
+            slug = rp.page.slug
+            existing = permissions.get(slug)
+            permissions[slug] = PermissionOut(
+                read=rp.can_read   or (existing.read  if existing else False),
+                write=rp.can_write or (existing.write if existing else False),
+            )
+
+    return UserOut(
+        id=user.id,
+        member_id=user.member_id,
+        username=user.username,
+        full_name=user.member.full_name if user.member else None,
+        is_active=user.is_active,
+        last_login=user.last_login,
+        created_at=user.created_at,
+        permissions=permissions,
+    )
