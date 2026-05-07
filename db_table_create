@@ -320,7 +320,8 @@ INSERT INTO pages (slug, name) VALUES
     ('maintenance/roles',                 'Roles'),
     ('maintenance/users',                 'Users'),
     ('members',                           'Members'),
-    ('ministries',                        'Ministries');
+    ('ministries',                        'Ministries'),
+    ('reports',                           'Reports');
     
 
 
