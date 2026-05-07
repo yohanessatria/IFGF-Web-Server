@@ -313,6 +313,7 @@ CREATE TABLE pages (
 
 INSERT INTO pages (slug, name) VALUES
     ('attendance',                        'Attendance'),
+    ('attendance/import',                 'Attendance Import'),
     ('dashboard',                         'Dashboard'),
     ('icare',                             'iCare'),
     ('maintenance/activity-registrations','Activity Registrations'),
