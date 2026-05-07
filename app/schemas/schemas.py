@@ -120,6 +120,7 @@ class MemberBase(BaseModel):
     member_status: str = "visitor"
     join_date: Optional[date] = None
     home_church: Optional[str] = None
+    fp_user_id: Optional[int] = None
     notes: Optional[str] = None
 
 
