@@ -54,6 +54,10 @@ CREATE TABLE members (
     join_date            DATE,
     home_church          VARCHAR(100),
 
+    -- External identifier from the fingerprint attendance machine.
+    -- 1-to-1 with the member; same value is shared across mirrored devices.
+    fp_user_id           INTEGER         UNIQUE,
+
     notes                TEXT,
     created_at           TIMESTAMP       NOT NULL DEFAULT NOW(),
     updated_at           TIMESTAMP       NOT NULL DEFAULT NOW(),

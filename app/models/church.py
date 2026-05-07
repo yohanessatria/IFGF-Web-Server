@@ -32,6 +32,8 @@ class Member(Base):
     join_date        = Column(Date)
     home_church      = Column(String(100))
 
+    fp_user_id       = Column(Integer, unique=True)
+
     notes            = Column(Text)
     created_at       = Column(DateTime(timezone=True), server_default=func.now())
     updated_at       = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

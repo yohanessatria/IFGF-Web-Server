@@ -9,7 +9,7 @@ from app.core.security import (
 )
 from app.models.user import User, UserRole, Role, RolePermission
 from app.models.church import Member
-from app.schemas.schemas import Token, UserCreate, UserOut, PermissionOut
+from app.schemas.schemas import Token, UserCreate, UserOut, UserWithRoles, PermissionOut
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
 
@@ -46,7 +46,7 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
     return user
 
 
-@router.get("/me", response_model=UserOut)
+@router.get("/me", response_model=UserWithRoles)
 def me(current_user: User = Depends(require_active_user), db: Session = Depends(get_db)):
     user = (
         db.query(User)
@@ -68,7 +68,7 @@ def me(current_user: User = Depends(require_active_user), db: Session = Depends(
                 write=rp.can_write or (existing.write if existing else False),
             )
 
-    return UserOut(
+    return UserWithRoles(
         id=user.id,
         member_id=user.member_id,
         username=user.username,
@@ -77,4 +77,5 @@ def me(current_user: User = Depends(require_active_user), db: Session = Depends(
         last_login=user.last_login,
         created_at=user.created_at,
         permissions=permissions,
+        roles=[ur.role.name for ur in user.user_roles],
     )
