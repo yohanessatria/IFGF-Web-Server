@@ -5,7 +5,14 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import require_active_user
+from app.core.security import (
+    require_active_user,
+    get_allowed_activity_type_ids,
+    assert_activity_type_allowed,
+    get_user_role_names,
+    ROLE_SUPER_ADMIN,
+    ROLE_ICARE_LEADER,
+)
 from app.models.church import ActivitySession, ActivityType
 from app.schemas.schemas import ActivitySessionCreate, ActivitySessionUpdate, ActivitySessionOut
 
@@ -20,9 +27,20 @@ def list_sessions(
     skip: int = 0,
     limit: int = Query(100, le=500),
     db: Session = Depends(get_db),
-    _=Depends(require_active_user),
+    current_user=Depends(require_active_user),
 ):
+    roles = get_user_role_names(current_user, db)
+    if ROLE_SUPER_ADMIN not in roles and ROLE_ICARE_LEADER not in roles:
+        return []
+
+    allowed = get_allowed_activity_type_ids(current_user, db)
+    if allowed is not None and not allowed:
+        return []
     q = db.query(ActivitySession)
+    if ROLE_SUPER_ADMIN not in roles:
+        q = q.filter(ActivitySession.created_by == current_user.id)
+    if allowed is not None:
+        q = q.filter(ActivitySession.activity_type_id.in_(allowed))
     if activity_type_id:
         q = q.filter(ActivitySession.activity_type_id == activity_type_id)
     if date_from:
@@ -41,6 +59,7 @@ def create_session(
     activity = db.get(ActivityType, payload.activity_type_id)
     if not activity or not activity.is_active:
         raise HTTPException(status_code=404, detail="Activity type not found or inactive")
+    assert_activity_type_allowed(current_user, db, payload.activity_type_id)
 
     session = ActivitySession(
         activity_type_id=payload.activity_type_id,
@@ -60,10 +79,11 @@ def create_session(
 
 
 @router.get("/{session_id}", response_model=ActivitySessionOut)
-def get_session(session_id: int, db: Session = Depends(get_db), _=Depends(require_active_user)):
+def get_session(session_id: int, db: Session = Depends(get_db), current_user=Depends(require_active_user)):
     session = db.get(ActivitySession, session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
+    assert_activity_type_allowed(current_user, db, session.activity_type_id)
     return session
 
 
@@ -72,11 +92,12 @@ def update_session(
     session_id: int,
     payload: ActivitySessionUpdate,
     db: Session = Depends(get_db),
-    _=Depends(require_active_user),
+    current_user=Depends(require_active_user),
 ):
     session = db.get(ActivitySession, session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
+    assert_activity_type_allowed(current_user, db, session.activity_type_id)
 
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(session, field, value)
@@ -87,9 +108,10 @@ def update_session(
 
 
 @router.delete("/{session_id}", status_code=204)
-def delete_session(session_id: int, db: Session = Depends(get_db), _=Depends(require_active_user)):
+def delete_session(session_id: int, db: Session = Depends(get_db), current_user=Depends(require_active_user)):
     session = db.get(ActivitySession, session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
+    assert_activity_type_allowed(current_user, db, session.activity_type_id)
     db.delete(session)
     db.commit()

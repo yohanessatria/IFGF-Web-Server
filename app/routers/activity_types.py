@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import require_active_user
+from app.core.security import require_active_user, get_allowed_activity_type_ids
 from app.models.church import ActivityType
 from app.schemas.schemas import ActivityTypeCreate, ActivityTypeUpdate, ActivityTypeOut
 
@@ -14,11 +14,16 @@ router = APIRouter(prefix="/api/activity-types", tags=["Activity Types"])
 def list_activity_types(
     include_inactive: bool = False,
     db: Session = Depends(get_db),
-    _=Depends(require_active_user),
+    current_user=Depends(require_active_user),
 ):
+    allowed = get_allowed_activity_type_ids(current_user, db)
+    if allowed is not None and not allowed:
+        return []
     q = db.query(ActivityType)
     if not include_inactive:
         q = q.filter(ActivityType.is_active == True)
+    if allowed is not None:
+        q = q.filter(ActivityType.id.in_(allowed))
     return q.order_by(ActivityType.name).all()
 
 

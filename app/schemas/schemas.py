@@ -211,6 +211,13 @@ class ActivityRegistrationOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ActivityRegistrationWithDetails(ActivityRegistrationOut):
+    member_name: Optional[str] = None
+    member_nickname: Optional[str] = None
+    session_date: Optional[date] = None
+    activity_type_name: Optional[str] = None
+
+
 # ── ATTENDANCE ────────────────────────────────────────────────────────────────
 
 class AttendanceCheckIn(BaseModel):
@@ -253,7 +260,34 @@ class IcareGroupUpdate(BaseModel):
 
 class IcareGroupOut(IcareGroupBase):
     id: int
+    activity_type_id: Optional[int] = None
     model_config = ConfigDict(from_attributes=True)
+
+
+class IcareSessionBulkCreate(BaseModel):
+    session_date: date
+    member_ids: List[int]
+    notes: Optional[str] = None
+
+
+class IcareSessionBulkOut(BaseModel):
+    session_id: int
+    activity_type_id: int
+    session_date: date
+    expected_count: int
+    registered_member_ids: List[int]
+
+
+class IcareAttendanceBulkCreate(BaseModel):
+    attendance_date: Optional[date] = None
+    member_ids: List[int]
+
+
+class IcareAttendanceBulkOut(BaseModel):
+    activity_type_id: int
+    attendance_date: date
+    inserted: int
+    skipped: int
 
 
 # ── ICARE MEMBER ──────────────────────────────────────────────────────────────

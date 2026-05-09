@@ -79,7 +79,6 @@ CREATE TABLE activity_types (
 INSERT INTO activity_types (name) VALUES
     ('Ibadah Taipei'),
     ('Ibadah Zhongli'),
-    ('iCare'),
     ('CGSL');
 
 
@@ -171,14 +170,19 @@ CREATE UNIQUE INDEX uq_attendance
 -- 6. ICARE GROUPS
 -- ============================================================
 CREATE TABLE icare_groups (
-    id         SERIAL PRIMARY KEY,
-    name       VARCHAR(100)    NOT NULL UNIQUE,
-    leader_id  INTEGER,
-    is_active  BOOLEAN         NOT NULL DEFAULT true,
-    created_at TIMESTAMP       NOT NULL DEFAULT NOW(),
+    id               SERIAL PRIMARY KEY,
+    name             VARCHAR(100)    NOT NULL UNIQUE,
+    leader_id        INTEGER,
+    activity_type_id INTEGER         UNIQUE,
+    is_active        BOOLEAN         NOT NULL DEFAULT true,
+    created_at       TIMESTAMP       NOT NULL DEFAULT NOW(),
 
     CONSTRAINT fk_icare_leader
         FOREIGN KEY (leader_id) REFERENCES members(id)
+        ON DELETE SET NULL,
+
+    CONSTRAINT fk_icare_activity_type
+        FOREIGN KEY (activity_type_id) REFERENCES activity_types(id)
         ON DELETE SET NULL
 );
 
