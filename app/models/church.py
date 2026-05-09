@@ -67,6 +67,7 @@ class ActivitySession(Base):
     session_date     = Column(Date, nullable=False, index=True)
     expected_count   = Column(Integer, nullable=True)
     notes            = Column(Text)
+    cgsl_material_id = Column(Integer, ForeignKey("cgsl_materials.id", ondelete="SET NULL"), nullable=True)
     created_at       = Column(DateTime(timezone=True), server_default=func.now())
     created_by       = Column(Integer)
 
@@ -132,6 +133,72 @@ class MinistryType(Base):
     description = Column(Text)
     is_active   = Column(Boolean, nullable=False, default=True)
     created_at  = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class CgslMaterial(Base):
+    __tablename__ = "cgsl_materials"
+
+    id          = Column(Integer, primary_key=True, index=True)
+    order_index = Column(Integer, nullable=False)
+    category    = Column(String(10), nullable=False)
+    title       = Column(String(200), nullable=False)
+    description = Column(Text)
+    is_active   = Column(Boolean, nullable=False, default=True)
+    created_at  = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint("category IN ('come','grow','lead','serve')", name="ck_cgsl_material_category"),
+        UniqueConstraint("category", "order_index", name="uq_cgsl_material_chapter"),
+    )
+
+
+class Cgsl(Base):
+    __tablename__ = "cgsl"
+
+    id               = Column(Integer, primary_key=True, index=True)
+    name             = Column(String(200), nullable=False, unique=True)
+    cgsl_category    = Column(String(10), nullable=False)
+    batch_number     = Column(Integer, nullable=False)
+    year             = Column(Integer, nullable=False)
+    activity_type_id = Column(Integer, ForeignKey("activity_types.id", ondelete="SET NULL"), unique=True)
+    is_active        = Column(Boolean, nullable=False, default=True)
+    created_at       = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint("cgsl_category IN ('come','grow','lead','serve')", name="ck_cgsl_category"),
+    )
+
+
+class CgslMember(Base):
+    __tablename__ = "cgsl_members"
+
+    id          = Column(Integer, primary_key=True, index=True)
+    cgsl_id     = Column(Integer, ForeignKey("cgsl.id", ondelete="RESTRICT"), nullable=False, index=True)
+    member_id   = Column(Integer, ForeignKey("members.id", ondelete="RESTRICT"), nullable=False, index=True)
+    joined_date = Column(Date, nullable=False, server_default=func.current_date())
+    left_date   = Column(Date)
+    is_active   = Column(Boolean, nullable=False, default=True)
+    created_at  = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("cgsl_id", "member_id", name="uq_cgsl_member"),
+    )
+
+
+class CgslTeacher(Base):
+    __tablename__ = "cgsl_teachers"
+
+    id          = Column(Integer, primary_key=True, index=True)
+    cgsl_id     = Column(Integer, ForeignKey("cgsl.id", ondelete="RESTRICT"), nullable=False, index=True)
+    member_id   = Column(Integer, ForeignKey("members.id", ondelete="RESTRICT"), nullable=False, index=True)
+    joined_date = Column(Date, nullable=False, server_default=func.current_date())
+    left_date   = Column(Date)
+    is_active   = Column(Boolean, nullable=False, default=True)
+    created_at  = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("cgsl_id", "member_id", name="uq_cgsl_teacher"),
+    )
 
 
 class MemberMinistry(Base):
