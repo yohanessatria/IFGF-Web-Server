@@ -349,30 +349,21 @@ def create_cgsl_session(
     if group.activity_type_id is None:
         raise HTTPException(status_code=400, detail="CGSL group has no linked activity type")
 
-    member_ids = [
+    student_ids = [
         r[0] for r in (
             db.query(CgslMember.member_id)
             .filter(CgslMember.cgsl_id == cgsl_id, CgslMember.is_active == True)  # noqa: E712
             .all()
         )
     ]
-    teacher_ids = [
-        r[0] for r in (
-            db.query(CgslTeacher.member_id)
-            .filter(CgslTeacher.cgsl_id == cgsl_id, CgslTeacher.is_active == True)  # noqa: E712
-            .all()
-        )
-    ]
-    # combine, deduplicate, preserve order (members first, then teachers not already in members)
-    all_ids = list(dict.fromkeys(member_ids + [t for t in teacher_ids if t not in set(member_ids)]))
 
-    if not all_ids:
-        raise HTTPException(status_code=400, detail="No active members or teachers in this CGSL group")
+    if not student_ids:
+        raise HTTPException(status_code=400, detail="No active students in this CGSL group")
 
     session = ActivitySession(
         activity_type_id=group.activity_type_id,
         session_date=payload.session_date,
-        expected_count=len(all_ids),
+        expected_count=len(student_ids),
         notes=payload.notes,
         cgsl_material_id=payload.cgsl_material_id,
         created_by=current_user.id,
@@ -384,7 +375,7 @@ def create_cgsl_session(
         db.rollback()
         raise HTTPException(status_code=409, detail="Session already exists for this CGSL on that date")
 
-    for mid in all_ids:
+    for mid in student_ids:
         db.add(ActivityRegistration(session_id=session.id, member_id=mid, created_by=current_user.id))
 
     try:
@@ -399,7 +390,7 @@ def create_cgsl_session(
         activity_type_id=session.activity_type_id,
         session_date=session.session_date,
         expected_count=session.expected_count,
-        registered_member_ids=all_ids,
+        registered_member_ids=student_ids,
     )
 
 
