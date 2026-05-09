@@ -5,7 +5,11 @@ from sqlalchemy import func, text, and_
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import require_active_user
+from app.core.security import (
+    require_active_user,
+    get_allowed_activity_type_ids,
+    assert_activity_type_allowed,
+)
 from app.models.church import Attendance, Member, ActivityType
 from app.schemas.schemas import AttendanceCheckIn, AttendanceOut, AttendanceWithMember
 
@@ -16,7 +20,7 @@ router = APIRouter(prefix="/api/attendance", tags=["Attendance"])
 def check_in(
     payload: AttendanceCheckIn,
     db: Session = Depends(get_db),
-    _=Depends(require_active_user),
+    current_user=Depends(require_active_user),
 ):
     """Record attendance for a member. Prevents duplicate on the same day+activity."""
     member = db.get(Member, payload.member_id)
@@ -26,6 +30,7 @@ def check_in(
     activity = db.get(ActivityType, payload.activity_type_id)
     if not activity or not activity.is_active:
         raise HTTPException(status_code=404, detail="Activity type not found or inactive")
+    assert_activity_type_allowed(current_user, db, payload.activity_type_id)
 
     ts = payload.timestamp or datetime.utcnow()
     check_date = ts.date()
@@ -59,8 +64,11 @@ def list_attendance(
     skip: int = 0,
     limit: int = Query(100, le=500),
     db: Session = Depends(get_db),
-    _=Depends(require_active_user),
+    current_user=Depends(require_active_user),
 ):
+    allowed = get_allowed_activity_type_ids(current_user, db)
+    if allowed is not None and not allowed:
+        return []
     q = (
         db.query(
             Attendance.id,
@@ -74,6 +82,8 @@ def list_attendance(
         .join(Member, Attendance.member_id == Member.id)
         .join(ActivityType, Attendance.activity_type_id == ActivityType.id)
     )
+    if allowed is not None:
+        q = q.filter(Attendance.activity_type_id.in_(allowed))
     if activity_type_id:
         q = q.filter(Attendance.activity_type_id == activity_type_id)
     if member_id:
@@ -92,9 +102,10 @@ def get_session_attendance(
     activity_type_id: int,
     session_date: date,
     db: Session = Depends(get_db),
-    _=Depends(require_active_user),
+    current_user=Depends(require_active_user),
 ):
     """Get all attendees for a specific activity on a specific date."""
+    assert_activity_type_allowed(current_user, db, activity_type_id)
     rows = (
         db.query(
             Attendance.id,
@@ -118,10 +129,11 @@ def get_session_attendance(
 
 
 @router.delete("/{attendance_id}", status_code=204)
-def delete_attendance(attendance_id: int, db: Session = Depends(get_db), _=Depends(require_active_user)):
+def delete_attendance(attendance_id: int, db: Session = Depends(get_db), current_user=Depends(require_active_user)):
     record = db.get(Attendance, attendance_id)
     if not record:
         raise HTTPException(status_code=404, detail="Attendance record not found")
+    assert_activity_type_allowed(current_user, db, record.activity_type_id)
     db.delete(record)
     db.commit()
 
@@ -131,7 +143,7 @@ def import_attendance_report(
     activity_type_id: int = Form(...),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    _=Depends(require_active_user),
+    current_user=Depends(require_active_user),
 ):
     """Import a tab-separated attendance report exported from a fingerprint device.
 
@@ -145,6 +157,7 @@ def import_attendance_report(
     activity = db.get(ActivityType, activity_type_id)
     if not activity or not activity.is_active:
         raise HTTPException(status_code=404, detail="Activity type not found or inactive")
+    assert_activity_type_allowed(current_user, db, activity_type_id)
 
     raw = file.file.read()
     try:

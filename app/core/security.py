@@ -10,6 +10,9 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.database import get_db
 
+ROLE_SUPER_ADMIN = "super_admin"
+ROLE_ICARE_LEADER = "icare_leader"
+
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token")
 
@@ -55,3 +58,52 @@ def require_active_user(current_user=Depends(get_current_user)):
     if not current_user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
     return current_user
+
+
+def get_user_role_names(user, db: Session) -> set[str]:
+    from app.models.user import UserRole, Role
+    rows = (
+        db.query(Role.name)
+        .join(UserRole, UserRole.role_id == Role.id)
+        .filter(UserRole.user_id == user.id)
+        .all()
+    )
+    return {r[0] for r in rows}
+
+
+def is_super_admin(user, db: Session) -> bool:
+    return ROLE_SUPER_ADMIN in get_user_role_names(user, db)
+
+
+def get_allowed_activity_type_ids(user, db: Session) -> Optional[list[int]]:
+    """Activity-type scoping for the current user.
+
+    Returns:
+      None  → unrestricted (super_admin sees all)
+      list  → restricted to these activity_type_ids (possibly empty if none)
+    """
+    from app.models.church import IcareGroup
+    roles = get_user_role_names(user, db)
+    if ROLE_SUPER_ADMIN in roles:
+        return None
+    allowed: list[int] = []
+    if ROLE_ICARE_LEADER in roles and user.member_id is not None:
+        rows = (
+            db.query(IcareGroup.activity_type_id)
+            .filter(
+                IcareGroup.leader_id == user.member_id,
+                IcareGroup.is_active == True,  # noqa: E712
+                IcareGroup.activity_type_id.isnot(None),
+            )
+            .all()
+        )
+        allowed.extend(r[0] for r in rows)
+    return allowed
+
+
+def assert_activity_type_allowed(user, db: Session, activity_type_id: int) -> None:
+    allowed = get_allowed_activity_type_ids(user, db)
+    if allowed is None:
+        return
+    if activity_type_id not in allowed:
+        raise HTTPException(status_code=403, detail="Not permitted for this activity type")
