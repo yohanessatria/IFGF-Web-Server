@@ -12,6 +12,7 @@ from app.core.database import get_db
 
 ROLE_SUPER_ADMIN = "super_admin"
 ROLE_ICARE_LEADER = "icare_leader"
+ROLE_CGSL_LEADER = "cgsl_leader"
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token")
@@ -82,7 +83,7 @@ def get_allowed_activity_type_ids(user, db: Session) -> Optional[list[int]]:
       None  → unrestricted (super_admin sees all)
       list  → restricted to these activity_type_ids (possibly empty if none)
     """
-    from app.models.church import IcareGroup
+    from app.models.church import IcareGroup, Cgsl
     roles = get_user_role_names(user, db)
     if ROLE_SUPER_ADMIN in roles:
         return None
@@ -94,6 +95,16 @@ def get_allowed_activity_type_ids(user, db: Session) -> Optional[list[int]]:
                 IcareGroup.leader_id == user.member_id,
                 IcareGroup.is_active == True,  # noqa: E712
                 IcareGroup.activity_type_id.isnot(None),
+            )
+            .all()
+        )
+        allowed.extend(r[0] for r in rows)
+    if ROLE_CGSL_LEADER in roles:
+        rows = (
+            db.query(Cgsl.activity_type_id)
+            .filter(
+                Cgsl.is_active == True,  # noqa: E712
+                Cgsl.activity_type_id.isnot(None),
             )
             .all()
         )

@@ -171,11 +171,13 @@ class ActivitySessionCreate(BaseModel):
     session_date: date
     expected_count: Optional[int] = None
     notes: Optional[str] = None
+    cgsl_material_id: Optional[int] = None
 
 
 class ActivitySessionUpdate(BaseModel):
     expected_count: Optional[int] = None
     notes: Optional[str] = None
+    cgsl_material_id: Optional[int] = None
 
 
 class ActivitySessionOut(BaseModel):
@@ -184,6 +186,7 @@ class ActivitySessionOut(BaseModel):
     session_date: date
     expected_count: Optional[int]
     notes: Optional[str]
+    cgsl_material_id: Optional[int] = None
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
@@ -306,6 +309,118 @@ class IcareMemberOut(BaseModel):
     left_date: Optional[date]
     is_active: bool
     model_config = ConfigDict(from_attributes=True)
+
+
+# ── CGSL ─────────────────────────────────────────────────────────────────────
+
+class CgslBase(BaseModel):
+    name: str
+    cgsl_category: str
+    batch_number: int
+    year: int
+    is_active: bool = True
+
+
+class CgslCreate(CgslBase):
+    pass
+
+
+class CgslUpdate(BaseModel):
+    name: Optional[str] = None
+    cgsl_category: Optional[str] = None
+    batch_number: Optional[int] = None
+    year: Optional[int] = None
+    is_active: Optional[bool] = None
+
+
+class CgslOut(CgslBase):
+    id: int
+    activity_type_id: Optional[int] = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CgslMemberCreate(BaseModel):
+    cgsl_id: int
+    member_id: int
+    joined_date: Optional[date] = None
+
+
+class CgslMemberOut(BaseModel):
+    id: int
+    cgsl_id: int
+    member_id: int
+    joined_date: date
+    left_date: Optional[date]
+    is_active: bool
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CgslTeacherCreate(BaseModel):
+    cgsl_id: int
+    member_id: int
+    joined_date: Optional[date] = None
+
+
+class CgslTeacherOut(BaseModel):
+    id: int
+    cgsl_id: int
+    member_id: int
+    joined_date: date
+    left_date: Optional[date]
+    is_active: bool
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CgslMaterialCreate(BaseModel):
+    order_index: int
+    category: str
+    title: str
+    description: Optional[str] = None
+    is_active: bool = True
+
+
+class CgslMaterialUpdate(BaseModel):
+    order_index: Optional[int] = None
+    category: Optional[str] = None
+    title: Optional[str] = None
+    description: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+class CgslMaterialOut(BaseModel):
+    id: int
+    order_index: int
+    category: str
+    title: str
+    description: Optional[str]
+    is_active: bool
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CgslSessionBulkCreate(BaseModel):
+    session_date: date
+    cgsl_material_id: Optional[int] = None
+    notes: Optional[str] = None
+
+
+class CgslSessionBulkOut(BaseModel):
+    session_id: int
+    activity_type_id: int
+    session_date: date
+    expected_count: int
+    registered_member_ids: List[int]
+
+
+class CgslAttendanceBulkCreate(BaseModel):
+    attendance_date: Optional[date] = None
+    member_ids: List[int]
+
+
+class CgslAttendanceBulkOut(BaseModel):
+    activity_type_id: int
+    attendance_date: date
+    inserted: int
+    skipped: int
 
 
 # ── MINISTRY TYPE ─────────────────────────────────────────────────────────────

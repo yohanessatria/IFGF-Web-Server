@@ -1,8 +1,14 @@
 -- ============================================================
--- IFGF Taipei Zhongli - Church Database Schema (FIXED)
--- Version: 2026-05-01b
+-- IFGF Taipei Zhongli - Church Database Schema
+-- Version: 2026-05-09b
 -- Changes from previous version:
---   - Added activity_registrations table (who registered for a session)
+--   - Added cgsl_materials table (curriculum catalog per category)
+--   - Added cgsl table (CGSL batch groups, auto-linked to activity_type)
+--   - Added cgsl_members table (students roster)
+--   - Added cgsl_teachers table (separate teachers roster)
+--   - Added cgsl_material_id FK on activity_sessions
+--   - Added cgsl_leader role (already seeded in roles)
+--   - Added cgsl, cgsl-groups, cgsl-materials pages
 -- ============================================================
 --
 -- ATTENDANCE TRACKING SUMMARY
@@ -16,9 +22,12 @@
 -- ============================================================
 
 DROP TABLE IF EXISTS role_permissions, pages, user_roles, roles, users,
-                     member_ministries, ministry_types, icare_members,
-                     icare_groups, attendance, activity_registrations,
-                     activity_sessions, activity_types, members CASCADE;
+                     member_ministries, ministry_types,
+                     cgsl_teachers, cgsl_members, cgsl,
+                     icare_members, icare_groups,
+                     attendance, activity_registrations,
+                     activity_sessions, cgsl_materials,
+                     activity_types, members CASCADE;
 
 
 -- ============================================================
@@ -78,17 +87,65 @@ CREATE TABLE activity_types (
 
 INSERT INTO activity_types (name) VALUES
     ('Ibadah Taipei'),
-    ('Ibadah Zhongli'),
-    ('CGSL');
+    ('Ibadah Zhongli');
 
 
 -- ============================================================
--- 3. ACTIVITY SESSIONS
+-- 3. CGSL MATERIALS
+-- Curriculum catalog. order_index is the chapter number within
+-- each category (Come ch.1, ch.2 … Grow ch.1, ch.2 …).
+-- Must be created before activity_sessions (FK reference).
+-- ============================================================
+CREATE TABLE cgsl_materials (
+    id          SERIAL PRIMARY KEY,
+    order_index INTEGER         NOT NULL,
+    category    VARCHAR(10)     NOT NULL
+                    CHECK (category IN ('come', 'grow', 'lead', 'serve')),
+    title       VARCHAR(200)    NOT NULL,
+    description TEXT,
+    is_active   BOOLEAN         NOT NULL DEFAULT true,
+    created_at  TIMESTAMP       NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT uq_cgsl_material_chapter
+        UNIQUE (category, order_index)
+);
+
+INSERT INTO cgsl_materials (order_index, category, title) VALUES
+    (1, 'come', 'Keselamatan'),
+    (2, 'come', 'Keselamatan dan Transformasi Kehidupan'),
+    (3, 'come', 'Baptisan Air'),
+    (4, 'come', 'Roh Kudus'),
+    (5, 'come', 'Setiap Hari Bersama Kristus'),
+    (6, 'come', 'Ikatan Perjanjian dalam Gereja Lokal'),
+    (7, 'come', 'Karya Salib'),
+    (8, 'come', 'Pelayanan Pelepasan'),
+    (1, 'grow', 'Pernyataan Misi IFGF'),
+    (2, 'grow', 'Pernyataan Visi IFGF (1)'),
+    (3, 'grow', 'Pernyataan Visi IFGF (2)'),
+    (4, 'grow', 'DNA Dan Nilai-Nilai Utama IFGF'),
+    (5, 'grow', 'Tempat Perlindungan'),
+    (6, 'grow', 'Tempat Pertumbuhan'),
+    (1, 'serve', 'Arti Sebuah Hubungan'),
+    (2, 'serve', 'Arti Sebuah Pelayanan'),
+    (3, 'serve', 'Keindahan Relawan'),
+    (4, 'serve', 'Melayani dengan Potensi Anda'),
+    (5, 'serve', 'Melayani Secara Relevan'),
+    (6, 'serve', 'Pelayanan yang Membawa Dampak'),
+    (1, 'lead', 'Undangan Istimewa'),
+    (2, 'lead', 'Penginjilan One To One – 1'),
+    (3, 'lead', 'Penginjilan One To One – 2'),
+    (4, 'lead', 'Memimpin ICare Anda'),
+    (5, 'lead', 'Multiplikasi ICare'),
+    (6, 'lead', 'Mengatasi Konflik dan Tantangan Dalam Icare');
+
+-- ============================================================
+-- 4. ACTIVITY SESSIONS
 -- One row per planned occurrence of an activity on a specific date.
 -- Not all activity types require a session row (e.g. Sunday service
 -- attendance can be recorded without one).
 -- expected_count is nullable — can be filled manually when
 -- registration is not tracked, or derived from activity_registrations.
+-- cgsl_material_id links to the chapter covered in a CGSL session.
 -- ============================================================
 CREATE TABLE activity_sessions (
     id               SERIAL PRIMARY KEY,
@@ -96,6 +153,7 @@ CREATE TABLE activity_sessions (
     session_date     DATE            NOT NULL,
     expected_count   INTEGER         CHECK (expected_count IS NULL OR expected_count >= 0),
     notes            TEXT,
+    cgsl_material_id INTEGER,
     created_at       TIMESTAMP       NOT NULL DEFAULT NOW(),
     created_by       INTEGER,
 
@@ -103,13 +161,17 @@ CREATE TABLE activity_sessions (
         FOREIGN KEY (activity_type_id) REFERENCES activity_types(id)
         ON DELETE RESTRICT,
 
+    CONSTRAINT fk_session_cgsl_material
+        FOREIGN KEY (cgsl_material_id) REFERENCES cgsl_materials(id)
+        ON DELETE SET NULL,
+
     CONSTRAINT uq_session
         UNIQUE (activity_type_id, session_date)
 );
 
 
 -- ============================================================
--- 4. ACTIVITY REGISTRATIONS
+-- 5. ACTIVITY REGISTRATIONS
 -- Records which members have registered for a specific session.
 -- Used for planned activities (CGSL, special events) where
 -- registration is tracked in advance.
@@ -138,7 +200,7 @@ CREATE TABLE activity_registrations (
 
 
 -- ============================================================
--- 5. ATTENDANCE
+-- 6. ATTENDANCE
 -- Records each member's actual presence at any activity.
 -- For Sunday service: recorded directly with no session row needed.
 -- For CGSL / events: joins to activity_sessions via
@@ -167,7 +229,7 @@ CREATE UNIQUE INDEX uq_attendance
 
 
 -- ============================================================
--- 6. ICARE GROUPS
+-- 7. ICARE GROUPS
 -- ============================================================
 CREATE TABLE icare_groups (
     id               SERIAL PRIMARY KEY,
@@ -188,7 +250,7 @@ CREATE TABLE icare_groups (
 
 
 -- ============================================================
--- 7. ICARE MEMBERS
+-- 8. ICARE MEMBERS
 -- ============================================================
 CREATE TABLE icare_members (
     id          SERIAL PRIMARY KEY,
@@ -210,7 +272,85 @@ CREATE TABLE icare_members (
 
 
 -- ============================================================
--- 8. MINISTRY TYPES
+-- 9. CGSL
+-- One row per CGSL batch (e.g. "Come Zhongli Batch 1 2026").
+-- Auto-links to an activity_type on creation (same name).
+-- cgsl_category + batch_number + year give structured querying;
+-- name is the full free-form display label.
+-- ============================================================
+CREATE TABLE cgsl (
+    id               SERIAL PRIMARY KEY,
+    name             VARCHAR(200)    NOT NULL UNIQUE,
+    cgsl_category    VARCHAR(10)     NOT NULL
+                         CHECK (cgsl_category IN ('come', 'grow', 'lead', 'serve')),
+    batch_number     INTEGER         NOT NULL,
+    year             INTEGER         NOT NULL,
+    activity_type_id INTEGER         UNIQUE,
+    is_active        BOOLEAN         NOT NULL DEFAULT true,
+    created_at       TIMESTAMP       NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT fk_cgsl_activity_type
+        FOREIGN KEY (activity_type_id) REFERENCES activity_types(id)
+        ON DELETE SET NULL
+);
+
+
+-- ============================================================
+-- 10. CGSL MEMBERS (students roster)
+-- One row per student per batch. A member can only be a student
+-- once per batch (separate table for teachers below).
+-- ============================================================
+CREATE TABLE cgsl_members (
+    id          SERIAL PRIMARY KEY,
+    cgsl_id     INTEGER         NOT NULL,
+    member_id   INTEGER         NOT NULL,
+    joined_date DATE            NOT NULL DEFAULT CURRENT_DATE,
+    left_date   DATE,
+    is_active   BOOLEAN         NOT NULL DEFAULT true,
+    created_at  TIMESTAMP       NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT uq_cgsl_member
+        UNIQUE (cgsl_id, member_id),
+
+    CONSTRAINT fk_cgsl_members_cgsl
+        FOREIGN KEY (cgsl_id) REFERENCES cgsl(id)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT fk_cgsl_members_member
+        FOREIGN KEY (member_id) REFERENCES members(id)
+        ON DELETE RESTRICT
+);
+
+
+-- ============================================================
+-- 11. CGSL TEACHERS
+-- Separate roster for teachers in each CGSL batch.
+-- A member can teach multiple batches simultaneously.
+-- ============================================================
+CREATE TABLE cgsl_teachers (
+    id          SERIAL PRIMARY KEY,
+    cgsl_id     INTEGER         NOT NULL,
+    member_id   INTEGER         NOT NULL,
+    joined_date DATE            NOT NULL DEFAULT CURRENT_DATE,
+    left_date   DATE,
+    is_active   BOOLEAN         NOT NULL DEFAULT true,
+    created_at  TIMESTAMP       NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT uq_cgsl_teacher
+        UNIQUE (cgsl_id, member_id),
+
+    CONSTRAINT fk_cgsl_teachers_cgsl
+        FOREIGN KEY (cgsl_id) REFERENCES cgsl(id)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT fk_cgsl_teachers_member
+        FOREIGN KEY (member_id) REFERENCES members(id)
+        ON DELETE RESTRICT
+);
+
+
+-- ============================================================
+-- 12. MINISTRY TYPES
 -- ============================================================
 CREATE TABLE ministry_types (
     id          SERIAL PRIMARY KEY,
@@ -228,7 +368,7 @@ INSERT INTO ministry_types (name) VALUES
 
 
 -- ============================================================
--- 9. MEMBER MINISTRIES
+-- 13. MEMBER MINISTRIES
 -- ============================================================
 CREATE TABLE member_ministries (
     id               SERIAL PRIMARY KEY,
@@ -250,7 +390,7 @@ CREATE TABLE member_ministries (
 
 
 -- ============================================================
--- 10. USERS
+-- 14. USERS
 -- ============================================================
 CREATE TABLE users (
     id            SERIAL PRIMARY KEY,
@@ -268,7 +408,7 @@ CREATE TABLE users (
 
 
 -- ============================================================
--- 11. ROLES
+-- 15. ROLES
 -- ============================================================
 CREATE TABLE roles (
     id          SERIAL PRIMARY KEY,
@@ -281,11 +421,11 @@ INSERT INTO roles (name, description) VALUES
     ('super_admin',  'Akses penuh ke semua fitur termasuk manajemen user dan database'),
     ('admin',        'Kelola data jemaat, kehadiran, dan generate laporan'),
     ('icare_leader', 'Input kehadiran iCare untuk grup yang dipimpin'),
-    ('cgsl_leader',  'Input kehadiran CGSL untuk sesi yang dipimpin');
+    ('cgsl_leader',  'Input kehadiran CGSL untuk semua grup aktif');
 
 
 -- ============================================================
--- 12. USER ROLES
+-- 16. USER ROLES
 -- ============================================================
 CREATE TABLE user_roles (
     id         SERIAL PRIMARY KEY,
@@ -306,7 +446,7 @@ CREATE TABLE user_roles (
 
 
 -- ============================================================
--- 13. PAGES
+-- 17. PAGES
 -- ============================================================
 CREATE TABLE pages (
     id         SERIAL PRIMARY KEY,
@@ -318,11 +458,14 @@ CREATE TABLE pages (
 INSERT INTO pages (slug, name) VALUES
     ('attendance',                        'Attendance'),
     ('attendance/import',                 'Attendance Import'),
+    ('cgsl',                              'CGSL'),
     ('dashboard',                         'Dashboard'),
     ('icare',                             'iCare'),
     ('maintenance/activity-registrations','Activity Registrations'),
     ('maintenance/activity-sessions',     'Activity Sessions'),
     ('maintenance/activity-types',        'Activity Types'),
+    ('maintenance/cgsl-groups',           'CGSL Groups'),
+    ('maintenance/cgsl-materials',        'CGSL Materials'),
     ('maintenance/icare-groups',          'iCare Groups'),
     ('maintenance/ministry-types',        'Ministry Types'),
     ('maintenance/pages',                 'Pages'),
@@ -331,11 +474,10 @@ INSERT INTO pages (slug, name) VALUES
     ('members',                           'Members'),
     ('ministries',                        'Ministries'),
     ('reports',                           'Reports');
-    
 
 
 -- ============================================================
--- 14. ROLE PERMISSIONS
+-- 18. ROLE PERMISSIONS
 -- ============================================================
 CREATE TABLE role_permissions (
     id         SERIAL PRIMARY KEY,
@@ -378,6 +520,11 @@ CREATE INDEX idx_attendance_activity             ON attendance(activity_type_id)
 CREATE INDEX idx_attendance_timestamp            ON attendance(timestamp);
 CREATE INDEX idx_icare_members_icare             ON icare_members(icare_id);
 CREATE INDEX idx_icare_members_member            ON icare_members(member_id);
+CREATE INDEX idx_cgsl_members_cgsl               ON cgsl_members(cgsl_id);
+CREATE INDEX idx_cgsl_members_member             ON cgsl_members(member_id);
+CREATE INDEX idx_cgsl_teachers_cgsl              ON cgsl_teachers(cgsl_id);
+CREATE INDEX idx_cgsl_teachers_member            ON cgsl_teachers(member_id);
+CREATE INDEX idx_cgsl_category_year              ON cgsl(cgsl_category, year);
 CREATE INDEX idx_member_ministries_member        ON member_ministries(member_id);
 CREATE INDEX idx_users_member                    ON users(member_id);
 CREATE INDEX idx_user_roles_user                 ON user_roles(user_id);
@@ -439,3 +586,22 @@ CREATE INDEX idx_role_permissions_page           ON role_permissions(page_id);
 -- WHERE at.name = 'Ibadah Taipei'
 -- GROUP BY DATE(a.timestamp)
 -- ORDER BY service_date DESC;
+
+
+-- 4. CGSL session report with material covered
+--
+-- SELECT
+--     c.name                                                    AS cgsl_group,
+--     s.session_date,
+--     cm.category || ' Ch.' || cm.order_index                  AS material,
+--     cm.title,
+--     s.expected_count,
+--     COUNT(DISTINCT a.member_id)                               AS attended
+-- FROM cgsl c
+-- JOIN activity_sessions s   ON s.activity_type_id = c.activity_type_id
+-- LEFT JOIN cgsl_materials cm ON cm.id = s.cgsl_material_id
+-- LEFT JOIN attendance a
+--        ON a.activity_type_id = s.activity_type_id
+--       AND DATE(a.timestamp)  = s.session_date
+-- GROUP BY c.name, s.session_date, cm.category, cm.order_index, cm.title, s.expected_count
+-- ORDER BY c.name, s.session_date DESC;
