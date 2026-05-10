@@ -111,6 +111,28 @@ REPORT_TYPES = [
             },
         ],
     },
+    {
+        "type": "member_list",
+        "label": "Member List",
+        "description": "All members for a home church grouped by the year they joined.",
+        "params": [
+            {
+                "key": "location",
+                "label": "Location",
+                "type": "select",
+                "options": LOCATION_OPTIONS,
+                "default": "taipei",
+            },
+            {
+                "key": "year",
+                "label": "Year Joined",
+                "type": "number",
+                "default": None,
+                "min": 2000,
+                "max": 2100,
+            },
+        ],
+    },
 ]
 
 
@@ -437,11 +459,68 @@ def _build_summary_sheet(wb: Workbook, db: Session, location: str, year: int) ->
     return sheet_name
 
 
+def _build_member_list_sheet(wb: Workbook, db: Session, location: str, year: int) -> str:
+    home_churches = LOCATION_HOME_CHURCHES[location]
+
+    members = (
+        db.query(
+            Member.full_name,
+            Member.email,
+            Member.phone,
+            Member.home_church,
+            Member.category,
+            Member.member_status,
+            Member.created_at,
+        )
+        .filter(
+            Member.home_church.in_(home_churches),
+            Member.created_at < date(year + 1, 1, 1),
+        )
+        .order_by(Member.home_church, Member.full_name)
+        .all()
+    )
+
+    sheet_name = _unique_sheet_name(wb, f"Members {year} {LOCATION_SHORT[location]}")
+    ws = wb.create_sheet(sheet_name)
+
+    ws["A1"] = f"Member List — {LOCATION_SHORT[location]} {year}"
+    ws["A1"].font = Font(bold=True, size=13)
+
+    headers = ["No.", "Full Name", "Email", "Phone", "Home Church", "Category", "Status", "Date Joined"]
+    header_row = 3
+    for i, h in enumerate(headers, start=1):
+        c = ws.cell(row=header_row, column=i, value=h)
+        c.font = HEADER_FONT
+        c.fill = HEADER_FILL
+        c.alignment = CENTER
+        c.border = BORDER
+
+    for idx, m in enumerate(members, start=1):
+        row = header_row + idx
+        joined = m.created_at.date() if m.created_at else ""
+        ws.cell(row=row, column=1, value=idx).alignment = CENTER
+        ws.cell(row=row, column=2, value=m.full_name)
+        ws.cell(row=row, column=3, value=m.email or "")
+        ws.cell(row=row, column=4, value=m.phone or "")
+        ws.cell(row=row, column=5, value=m.home_church or "")
+        ws.cell(row=row, column=6, value=_kategori(m.category))
+        ws.cell(row=row, column=7, value=m.member_status or "")
+        ws.cell(row=row, column=8, value=joined).alignment = CENTER
+
+    widths = [5, 28, 28, 16, 16, 18, 12, 14]
+    for i, w in enumerate(widths, start=1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+
+    ws.freeze_panes = ws.cell(row=header_row + 1, column=1)
+    return sheet_name
+
+
 # ── Export endpoint ───────────────────────────────────────────────────────────
 
 BUILDERS = {
     "sunday_attendance_roster":  _build_roster_sheet,
     "sunday_attendance_summary": _build_summary_sheet,
+    "member_list":               _build_member_list_sheet,
 }
 
 
